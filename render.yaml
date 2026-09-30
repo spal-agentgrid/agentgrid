@@ -1,4 +1,4 @@
-# Render Blueprint for SPAL AgentGrid V1 (NOT deployed yet).
+# Render Blueprint for SPAL AgentGrid V1.
 # Docs: https://render.com/docs/blueprint-spec
 # Secrets use `sync: false`: Render asks for their values in the dashboard when the
 # Blueprint is first created. No secret values are stored in this file.
@@ -23,5 +23,7 @@ services:
       # --- secrets / placeholders (set in the Render dashboard)
       - key: AGENTGRID_SIGNING_SECRET
         sync: false               # long random string, e.g. `python -c "import secrets;print(secrets.token_urlsafe(48))"`
+      - key: AGENTGRID_ADMIN_TOKEN
+        sync: false               # enables /v1/admin/*; >= 32 chars, e.g. `openssl rand -hex 32`
       - key: DATABASE_URL
-        sync: false               # Neon Postgres URL. PLANNED: not read yet (SQLite is used); leave blank
+        sync: false               # optional Neon Postgres URL (…?sslmode=require); blank = ephemeral SQLite

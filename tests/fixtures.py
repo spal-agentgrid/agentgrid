@@ -114,3 +114,10 @@ def make_self_signed(days: int = 5) -> tuple[str, str, str]:
                     "-addext", "subjectAltName=IP:127.0.0.1,DNS:localhost"],
                    check=True, capture_output=True)
     return cert, key, d
+
+
+def make_store():
+    """Store for tests: Postgres when AGENTGRID_TEST_DATABASE_URL is set (CI job), else in-memory SQLite."""
+    from agentgrid.store import Store
+    url = os.environ.get("AGENTGRID_TEST_DATABASE_URL")
+    return Store(database_url=url) if url else Store(":memory:")

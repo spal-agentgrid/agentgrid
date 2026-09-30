@@ -1,4 +1,4 @@
-# SPAL AgentGrid V1: stdlib-only Python API (REST + MCP).
+# SPAL AgentGrid V1: Python API (REST + MCP). Stdlib core + pg8000 (pure Python) for optional Postgres.
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="SPAL AgentGrid" \
@@ -17,6 +17,8 @@ RUN useradd --create-home --uid 10001 agentgrid \
  && mkdir -p /data && chown agentgrid:agentgrid /data
 
 WORKDIR /app
+COPY requirements.txt ./
+RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 COPY agentgrid/ ./agentgrid/
 COPY LICENSE README.md ./
 

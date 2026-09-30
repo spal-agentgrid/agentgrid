@@ -1,4 +1,4 @@
-"""In-process token bucket per API key (V1 moves this to the edge/KV)."""
+"""In-process token buckets (V1 moves this to the edge/KV)."""
 from __future__ import annotations
 
 import threading
@@ -11,12 +11,18 @@ class RateLimiter:
         self._lock = threading.Lock()
 
     def allow(self, key: str, per_minute: int) -> tuple[bool, float]:
-        """Returns (allowed, retry_after_seconds)."""
+        """Per-minute bucket (burst = per_minute). Returns (allowed, retry_after_seconds)."""
+        return self.allow_window(key, per_minute, 60.0)
+
+    def allow_window(self, key: str, limit: int, window_s: float) -> tuple[bool, float]:
+        """Token bucket holding at most `limit` tokens, refilled at limit/window_s per second."""
         now = time.monotonic()
-        rate = per_minute / 60.0
+        rate = limit / window_s
         with self._lock:
-            tokens, last = self._buckets.get(key, (float(per_minute), now))
-            tokens = min(float(per_minute), tokens + (now - last) * rate)
+            if len(self._buckets) > 100_000:  # bound memory under abuse
+                self._buckets.clear()
+            tokens, last = self._buckets.get(key, (float(limit), now))
+            tokens = min(float(limit), tokens + (now - last) * rate)
             if tokens >= 1:
                 self._buckets[key] = (tokens - 1, now)
                 return True, 0.0
