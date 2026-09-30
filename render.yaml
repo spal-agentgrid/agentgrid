@@ -19,6 +19,8 @@ services:
         value: 0.0.0.0
       - key: AGENTGRID_DB
         value: /data/agentgrid.db # EPHEMERAL on the free plan (no persistent disk)
+      - key: AGENTGRID_TRUSTED_PROXY_HOPS
+        value: "3"                # Render: X-Forwarded-For = <client>, <Cloudflare edge>, <Render LB> (verified via /v1/admin/request-info)
       # PORT is injected by Render automatically; the server reads it.
       # --- secrets / placeholders (set in the Render dashboard)
       - key: AGENTGRID_SIGNING_SECRET
