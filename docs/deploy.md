@@ -1,6 +1,6 @@
 # Deploying AgentGrid V1 (Render + optional Neon Postgres)
 
-> **Status:** see the README for the live URL once deployed. Neon Postgres is **not connected yet** (PLANNED); without `DATABASE_URL` the service runs in SQLite demo mode, which is ephemeral on the free plan.
+> **Status: LIVE** as Render web service `agentgrid-api` (free plan, Singapore, Docker, auto-deploy after CI checks pass): **https://agentgrid-api.onrender.com** (MCP: `/mcp`). Neon Postgres is **not connected yet** (PLANNED), so the service runs in SQLite demo mode, which is ephemeral on the free plan.
 
 ## What gets deployed
 
@@ -40,6 +40,7 @@ Either use the Blueprint (`render.yaml`: **New → Blueprint**, pick the repo) o
 - `runtime: docker`, `plan: free`, `region: singapore`, `healthCheckPath: /healthz`, branch `main`, auto-deploy on
 - Env: `AGENTGRID_ENV=production`, `AGENTGRID_HOST=0.0.0.0`, and the secrets `AGENTGRID_SIGNING_SECRET` and `AGENTGRID_ADMIN_TOKEN` (generate each with `openssl rand -hex 32`, keep them in a password manager, never commit them)
 - `DATABASE_URL`: leave empty until Neon is connected
+- `AGENTGRID_TRUSTED_PROXY_HOPS=3`: on Render, requests arrive from a local proxy (peer `127.0.0.1`) with `X-Forwarded-For: <client>, <Cloudflare edge>, <Render internal LB>`, so the client is the 3rd entry from the right. Without this, every signup would share one IP bucket. Re-check with `/v1/admin/request-info` if Render's proxy chain changes
 - Render needs GitHub access to the `spal-agentgrid` org (install the Render GitHub App on the org) to build from the repo
 
 After the deploy, check the service (replace the URL with yours):

@@ -5,7 +5,19 @@
 
 **Deterministic website QA audits that AI agents can call over REST or MCP. Every finding comes with evidence, and every result is hashed and signed.**
 
-> **Status: V1 prototype.** Self-serve signup (100 free credits), an admin API and optional Postgres are implemented and tested in CI. There are no payments yet. The hosted deployment and the MCP Registry listing are tracked in [docs/deploy.md](docs/deploy.md); paid pricing below is **PLANNED**.
+> **Status: LIVE (demo mode)** at **https://agentgrid-api.onrender.com** (Render free plan, Singapore). Self-serve signup (100 free credits), an admin API and optional Postgres are implemented and tested in CI. The hosted instance currently uses **ephemeral SQLite**: accounts and keys are wiped on every redeploy, restart or spin-down until Neon Postgres is connected (PLANNED). Cold starts after 15 idle minutes take about a minute. No payments yet; paid pricing and the MCP Registry listing are **PLANNED**.
+
+## Try the hosted API
+
+```bash
+BASE=https://agentgrid-api.onrender.com
+curl -s -X POST $BASE/v1/signup -H "Content-Type: application/json" -d '{"email":"you@example.com"}'
+export AGENTGRID_API_KEY=ag_live_...        # from the response; shown only once
+curl -s -X POST $BASE/v1/capabilities/siteqa.audit/run -H "Authorization: Bearer $AGENTGRID_API_KEY" \
+  -H "Content-Type: application/json" -d '{"url":"https://example.com"}'
+```
+
+MCP (Streamable HTTP): `https://agentgrid-api.onrender.com/mcp` with `Authorization: Bearer ag_live_…`.
 
 ## What is `siteqa.audit`?
 
@@ -117,7 +129,7 @@ Errors look like `{"error": {"code", "message", "retryable", "request_id"}}`, us
 
 The tool is exposed as **`siteqa_audit`** (read-only, idempotent).
 
-**Remote (Streamable HTTP):** point an MCP client at `http://127.0.0.1:8787/mcp` with the header `Authorization: Bearer ag_live_…`.
+**Remote (Streamable HTTP):** point an MCP client at `https://agentgrid-api.onrender.com/mcp` (hosted) or `http://127.0.0.1:8787/mcp` (local) with the header `Authorization: Bearer ag_live_…`.
 
 ```bash
 curl -s -X POST http://127.0.0.1:8787/mcp -H "Authorization: Bearer $AGENTGRID_API_KEY" \
@@ -195,7 +207,7 @@ Design docs are in [`docs/`](docs): market research, capability selection, [V1 a
 
 ## Deployment
 
-A `Dockerfile` and a Render Blueprint (`render.yaml`, free web service, health check `/healthz`) are included. See [docs/deploy.md](docs/deploy.md).
+A `Dockerfile` and a Render Blueprint (`render.yaml`, free web service, health check `/healthz`) are included. The live service is `agentgrid-api` on Render (free plan, Singapore): https://agentgrid-api.onrender.com. See [docs/deploy.md](docs/deploy.md).
 
 ## Contributing & security
 
