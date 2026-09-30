@@ -1,0 +1,27 @@
+# Render Blueprint for SPAL AgentGrid V1 (NOT deployed yet).
+# Docs: https://render.com/docs/blueprint-spec
+# Secrets use `sync: false`: Render asks for their values in the dashboard when the
+# Blueprint is first created. No secret values are stored in this file.
+services:
+  - type: web
+    name: agentgrid-api
+    runtime: docker
+    plan: free                    # 0.1 CPU / 512 MB; spins down after 15 min idle
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass # deploy only after GitHub Actions CI passes
+    envVars:
+      # --- non-secret configuration
+      - key: AGENTGRID_ENV
+        value: production         # server refuses to start without AGENTGRID_SIGNING_SECRET
+      - key: AGENTGRID_HOST
+        value: 0.0.0.0
+      - key: AGENTGRID_DB
+        value: /data/agentgrid.db # EPHEMERAL on the free plan (no persistent disk)
+      # PORT is injected by Render automatically; the server reads it.
+      # --- secrets / placeholders (set in the Render dashboard)
+      - key: AGENTGRID_SIGNING_SECRET
+        sync: false               # long random string, e.g. `python -c "import secrets;print(secrets.token_urlsafe(48))"`
+      - key: DATABASE_URL
+        sync: false               # Neon Postgres URL. PLANNED: not read yet (SQLite is used); leave blank

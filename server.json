@@ -1,0 +1,32 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.spal-agentgrid/siteqa",
+  "title": "SPAL AgentGrid Site QA",
+  "description": "Deterministic website QA audits (HTTP, TLS, headers, SEO, links, a11y) with signed evidence.",
+  "version": "0.1.0",
+  "websiteUrl": "https://github.com/spal-agentgrid/agentgrid",
+  "repository": {
+    "url": "https://github.com/spal-agentgrid/agentgrid",
+    "source": "github"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://agentgrid-api.onrender.com/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer token: 'Bearer ag_live_...' (AgentGrid API key)",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ],
+  "_meta": {
+    "io.modelcontextprotocol.registry/publisher-provided": {
+      "status": "not-published",
+      "notes": "NOT YET PUBLISHED to the MCP Registry. The remote URL is a placeholder until the Render service is deployed; update it (and version) before running `mcp-publisher publish`."
+    }
+  }
+}
