@@ -8,7 +8,11 @@ POST /v1/capabilities/{name}/run        execute (auth, metered)
 GET  /v1/executions/{request_id}        execution record + audit log (auth)
 GET  /v1/executions/{request_id}/verify recompute evidence hash + signature (auth)
 GET  /v1/account                        balance + ledger (auth)
+POST /v1/signup                         self-serve signup: email -> one-time API key + free credits
 POST /mcp                               MCP JSON-RPC (auth for tools/call)
+GET  /v1/admin/accounts                 list accounts (admin bearer token)
+POST /v1/admin/accounts/{id}/credits    grant (or deduct) credits (admin bearer token)
+GET  /v1/admin/request-info             shows the derived client IP (admin; for proxy tuning)
 """
 from __future__ import annotations
 
@@ -17,12 +21,21 @@ import json
 import os
 import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qsl
 
 from . import __version__, mcp, registry
 from .service import Service, error_body
 from .store import Store
 
 MAX_REQUEST_BYTES = 64 * 1024
+ADMIN_ACCOUNT_CREDITS = re.compile(r"/v1/admin/accounts/(acct_[a-f0-9]{1,64})/credits")
+
+
+def trusted_proxy_hops() -> int:
+    try:
+        return max(0, int(os.environ.get("AGENTGRID_TRUSTED_PROXY_HOPS", "0")))
+    except ValueError:
+        return 0
 
 
 def make_handler(service: Service):
@@ -53,6 +66,33 @@ def make_handler(service: Service):
             raw = auth[7:].strip() if auth.lower().startswith("bearer ") else self.headers.get("X-API-Key")
             return service.store.authenticate(raw)
 
+        def _client_ip(self) -> str:
+            """Socket peer, or the N-th entry from the right of X-Forwarded-For when
+            AGENTGRID_TRUSTED_PROXY_HOPS=N (entries appended by our own proxies)."""
+            hops = trusted_proxy_hops()
+            if hops:
+                xff = [p.strip() for p in (self.headers.get("X-Forwarded-For") or "").split(",") if p.strip()]
+                if len(xff) >= hops:
+                    return xff[-hops]
+            return self.client_address[0]
+
+        def _admin_guard(self):
+            """Returns None if authorised, else sends the error response and returns True."""
+            acc = service.accounts
+            if not acc.admin_token:
+                self._send(404, error_body("NOT_FOUND", "no such route", None))
+                return True
+            if acc.admin_authorized(self.headers.get("Authorization")):
+                return None
+            ok, retry = acc.limiter.allow_window(f"admin_fail:{self._client_ip()}", 20, 60.0)
+            if not ok:
+                self._send(429, error_body("RATE_LIMITED", "too many failed admin attempts", None,
+                                           retry_after=retry), {"Retry-After": str(int(retry) + 1)})
+                return True
+            self._send(401, error_body("UNAUTHORIZED", "missing or invalid admin token", None),
+                       {"WWW-Authenticate": "Bearer"})
+            return True
+
         def _json_body(self):
             n = int(self.headers.get("Content-Length") or 0)
             if n > MAX_REQUEST_BYTES:
@@ -66,7 +106,19 @@ def make_handler(service: Service):
                 return self._send(200, {"status": "ok", "version": __version__})
             if path == "/v1/health":
                 caps = {n: service.store.capability_health(n) for n in registry.CAPABILITIES}
-                return self._send(200, {"status": "ok", "version": __version__, "capabilities": caps})
+                return self._send(200, {"status": "ok", "version": __version__,
+                                        "storage": service.store.backend_name, "capabilities": caps})
+            if path.startswith("/v1/admin/"):
+                if self._admin_guard():
+                    return
+                if path == "/v1/admin/accounts":
+                    query = dict(parse_qsl(self.path.partition("?")[2]))
+                    return self._send(*service.accounts.admin_list(query))
+                if path == "/v1/admin/request-info":
+                    return self._send(200, {"client_ip": self._client_ip(), "peer": self.client_address[0],
+                                            "x_forwarded_for": self.headers.get("X-Forwarded-For"),
+                                            "trusted_proxy_hops": trusted_proxy_hops()})
+                return self._send(404, error_body("NOT_FOUND", "no such route", None))
             if path == "/v1/capabilities":
                 return self._send(200, {"capabilities": [registry.public_view(c)
                                                          for c in registry.CAPABILITIES.values()]})
@@ -102,6 +154,16 @@ def make_handler(service: Service):
                 body = self._json_body()
             except (ValueError, json.JSONDecodeError) as exc:
                 return self._send(400, error_body("INVALID_INPUT", f"invalid JSON body: {exc}", None))
+            if path == "/v1/signup":
+                status, out, retry = service.accounts.signup(body, self._client_ip())
+                return self._send(status, out, {"Retry-After": str(int(retry) + 1)} if retry else None)
+            if path.startswith("/v1/admin/"):
+                if self._admin_guard():
+                    return
+                m = ADMIN_ACCOUNT_CREDITS.fullmatch(path)
+                if m:
+                    return self._send(*service.accounts.admin_grant(m.group(1), body))
+                return self._send(404, error_body("NOT_FOUND", "no such route", None))
             m = re.fullmatch(r"/v1/capabilities/([a-z0-9_.-]+)/run", path)
             if m:
                 status, out = service.execute(self._key(), m.group(1), body)
@@ -140,15 +202,21 @@ def main():
                     help="bind address (env AGENTGRID_HOST; use 0.0.0.0 in containers)")
     ap.add_argument("--port", type=int, default=int(os.environ.get("PORT") or 8787),
                     help="listen port (env PORT, as set by Render)")
-    ap.add_argument("--db", default=os.environ.get("AGENTGRID_DB", "agentgrid.db"))
+    ap.add_argument("--db", default=os.environ.get("AGENTGRID_DB", "agentgrid.db"),
+                    help="SQLite path (ignored when DATABASE_URL is set)")
     args = ap.parse_args()
     if os.environ.get("AGENTGRID_ENV") == "production" and not os.environ.get("AGENTGRID_SIGNING_SECRET"):
         raise SystemExit("AGENTGRID_SIGNING_SECRET must be set when AGENTGRID_ENV=production")
-    if os.environ.get("DATABASE_URL"):
-        print("warning: DATABASE_URL is set but Postgres support is PLANNED; using SQLite at", args.db)
-    service = Service(Store(args.db), allow_private_targets=os.environ.get("AGENTGRID_ALLOW_PRIVATE") == "1")
+    admin = os.environ.get("AGENTGRID_ADMIN_TOKEN", "")
+    if admin and len(admin) < 32:
+        raise SystemExit("AGENTGRID_ADMIN_TOKEN must be at least 32 characters (e.g. `openssl rand -hex 32`)")
+    database_url = os.environ.get("DATABASE_URL") or None
+    store = Store(args.db, database_url=database_url)
+    service = Service(store, allow_private_targets=os.environ.get("AGENTGRID_ALLOW_PRIVATE") == "1")
     srv = build_server(args.host, args.port, service)
-    print(f"AgentGrid prototype listening on http://{args.host}:{args.port}", flush=True)
+    where = "Postgres (DATABASE_URL)" if database_url else f"SQLite at {args.db}"
+    print(f"AgentGrid listening on http://{args.host}:{args.port} (storage: {where}; "
+          f"admin API {'enabled' if admin else 'disabled'})", flush=True)
     srv.serve_forever()
 
 

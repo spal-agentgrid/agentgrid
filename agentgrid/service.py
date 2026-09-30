@@ -41,8 +41,11 @@ def error_body(code: str, message: str, request_id: str | None, details=None, re
 
 
 class Service:
-    def __init__(self, store: Store, signing_secret: str | None = None, allow_private_targets: bool = False):
+    def __init__(self, store: Store, signing_secret: str | None = None, allow_private_targets: bool = False,
+                 accounts=None):
+        from .accounts import Accounts
         self.store = store
+        self.accounts = accounts or Accounts(store)
         self.limiter = RateLimiter()
         self.secret = (signing_secret or os.environ.get("AGENTGRID_SIGNING_SECRET") or "dev-only-secret").encode()
         self.allow_private = allow_private_targets

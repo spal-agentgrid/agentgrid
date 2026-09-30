@@ -9,8 +9,7 @@ import urllib.request
 
 from agentgrid.server import build_server
 from agentgrid.service import Service
-from agentgrid.store import Store
-from tests.fixtures import Fixture
+from tests.fixtures import Fixture, make_store
 
 
 class Client:
@@ -35,7 +34,7 @@ class APITests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.fx = Fixture().__enter__()
-        cls.store = Store(":memory:")
+        cls.store = make_store()
         cls.service = Service(cls.store, signing_secret="test-secret", allow_private_targets=True)
         cls.srv = build_server("127.0.0.1", 0, cls.service)
         threading.Thread(target=cls.srv.serve_forever, daemon=True).start()
@@ -103,7 +102,7 @@ class APITests(unittest.TestCase):
         rid = body["request_id"]
         tampered = dict(body)
         tampered["findings"] = []
-        self.store.db.execute("UPDATE executions SET result_json=? WHERE request_id=?",
+        self.store.execute("UPDATE executions SET result_json=? WHERE request_id=?",
                               (json.dumps(tampered), rid))
         self.assertFalse(c.req("GET", f"/v1/executions/{rid}/verify")[1]["valid"])
 

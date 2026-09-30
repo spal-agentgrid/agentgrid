@@ -10,12 +10,14 @@ from .store import Store
 def main():
     ap = argparse.ArgumentParser(description="AgentGrid local admin")
     ap.add_argument("--db", default=os.environ.get("AGENTGRID_DB", "agentgrid.db"))
+    ap.add_argument("--database-url", default=os.environ.get("DATABASE_URL") or None,
+                    help="Postgres URL (env DATABASE_URL); overrides --db")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("create-account"); c.add_argument("name"); c.add_argument("--credits", type=int, default=100)
     g = sub.add_parser("grant"); g.add_argument("account_id"); g.add_argument("credits", type=int)
     b = sub.add_parser("balance"); b.add_argument("account_id")
     args = ap.parse_args()
-    st = Store(args.db)
+    st = Store(args.db, database_url=args.database_url)
     if args.cmd == "create-account":
         acct = st.create_account(args.name)
         st.grant(acct, args.credits, reason="free_tier")
